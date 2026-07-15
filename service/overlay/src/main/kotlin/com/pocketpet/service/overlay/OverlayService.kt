@@ -41,10 +41,7 @@ import com.pocketpet.core.model.PetPreferences
 import com.pocketpet.core.model.PetState
 import com.pocketpet.core.model.ScreenBounds
 import com.pocketpet.core.model.SystemAction
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
-import dagger.hilt.components.SingletonComponent
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.launchIn
@@ -55,39 +52,27 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import com.pocketpet.service.overlay.R
 
-@EntryPoint
-@InstallIn(SingletonComponent::class)
-interface OverlayEntryPoint {
-    fun processBehaviorTick(): ProcessBehaviorTickUseCase
-    fun restorePetState(): RestorePetStateUseCase
-    fun petActionExecutor(): PetActionExecutor
-    fun petRepository(): PetRepository
-    fun preferencesRepository(): PetPreferencesRepository
-    fun notificationEventSource(): NotificationEventSource
-    fun systemStatusRepository(): SystemStatusRepository
-    fun installedAppResolver(): InstalledAppResolver
-}
-
 /**
  * Hosts the pet as a small `TYPE_APPLICATION_OVERLAY` window. Extends [LifecycleService] (which
  * gives a correctly-dispatched [Lifecycle] for free) and additionally implements
  * [ViewModelStoreOwner]/[SavedStateRegistryOwner] by hand, since a bare `Service` isn't one of
  * those on its own — the trio is what a [ComposeView] needs to host content outside an Activity.
  */
+@AndroidEntryPoint
 class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegistryOwner {
 
     override val viewModelStore: ViewModelStore = ViewModelStore()
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
     override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
 
-    private lateinit var processBehaviorTick: ProcessBehaviorTickUseCase
-    private lateinit var restorePetState: RestorePetStateUseCase
-    private lateinit var petActionExecutor: PetActionExecutor
-    private lateinit var petRepository: PetRepository
-    private lateinit var preferencesRepository: PetPreferencesRepository
-    private lateinit var notificationEventSource: NotificationEventSource
-    private lateinit var systemStatusRepository: SystemStatusRepository
-    private lateinit var installedAppResolver: InstalledAppResolver
+    @Inject lateinit var processBehaviorTick: ProcessBehaviorTickUseCase
+    @Inject lateinit var restorePetState: RestorePetStateUseCase
+    @Inject lateinit var petActionExecutor: PetActionExecutor
+    @Inject lateinit var petRepository: PetRepository
+    @Inject lateinit var preferencesRepository: PetPreferencesRepository
+    @Inject lateinit var notificationEventSource: NotificationEventSource
+    @Inject lateinit var systemStatusRepository: SystemStatusRepository
+    @Inject lateinit var installedAppResolver: InstalledAppResolver
 
     private lateinit var windowManager: WindowManager
     private lateinit var screenBoundsProvider: ScreenBoundsProvider
@@ -109,16 +94,6 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
     }
 
     override fun onCreate() {
-        val entryPoint = EntryPointAccessors.fromApplication(applicationContext, OverlayEntryPoint::class.java)
-        processBehaviorTick = entryPoint.processBehaviorTick()
-        restorePetState = entryPoint.restorePetState()
-        petActionExecutor = entryPoint.petActionExecutor()
-        petRepository = entryPoint.petRepository()
-        preferencesRepository = entryPoint.preferencesRepository()
-        notificationEventSource = entryPoint.notificationEventSource()
-        systemStatusRepository = entryPoint.systemStatusRepository()
-        installedAppResolver = entryPoint.installedAppResolver()
-
         savedStateRegistryController.performRestore(null)
         super.onCreate()
 
@@ -129,7 +104,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         screenBoundsProvider = ScreenBoundsProvider(this)
-        petSizePx = (88 * getResources().displayMetrics.density).roundToInt()
+        petSizePx = (88 * resources.displayMetrics.density).roundToInt()
         isRunning = true
 
         promoteToForeground()
@@ -202,7 +177,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
     // ---------------------------------------------------------------------------------------
 
     private fun addOverlayView() {
-        val density = getResources().displayMetrics.density
+        val density = resources.displayMetrics.density
         val bounds = screenBoundsProvider.current(density)
         val startPosition = petRepository.snapshot.value.position.takeIf { it.xDp > 0f || it.yDp > 0f }
             ?: PetPosition(xDp = bounds.safeLeft + 24f, yDp = bounds.safeTop + 96f)
@@ -267,7 +242,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
     // Behavior ticking
     // ---------------------------------------------------------------------------------------
 
-    private fun currentScreenBounds(): ScreenBounds = screenBoundsProvider.current(getResources().displayMetrics.density)
+    private fun currentScreenBounds(): ScreenBounds = screenBoundsProvider.current(resources.displayMetrics.density)
 
     private fun tick(interaction: UserInteractionType? = null) {
         lifecycleScope.launch {
@@ -331,7 +306,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
     private fun onWindowDragged(delta: androidx.compose.ui.geometry.Offset) {
         if (cachedPreferences.positionLocked) return
         val params = layoutParams ?: return
-        val density = getResources().displayMetrics.density
+        val density = resources.displayMetrics.density
         val bounds = currentScreenBounds()
         val newXDp = (params.x + delta.x) / density
         val newYDp = (params.y + delta.y) / density
@@ -359,7 +334,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
 
     private suspend fun animateThrow(initialVelocityXPxPerSecond: Float) {
         val params = layoutParams ?: return
-        val density = getResources().displayMetrics.density
+        val density = resources.displayMetrics.density
         var velocity = initialVelocityXPxPerSecond
         var x = params.x.toFloat()
         val bounds = currentScreenBounds()
@@ -384,7 +359,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
 
     private suspend fun snapToNearestEdge() {
         val params = layoutParams ?: return
-        val density = getResources().displayMetrics.density
+        val density = resources.displayMetrics.density
         val bounds = currentScreenBounds()
         val petSizeDp = petSizePx / density
         val currentX = params.x / density
@@ -437,7 +412,6 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
     private fun openSelectedApp() {
         lifecycleScope.launch {
             // Placeholder: this logic would normally resolve the app and execute via petActionExecutor
-            // since there's no selectedAppPackageName directly in PetPreferences (it was a guess).
         }
     }
 
