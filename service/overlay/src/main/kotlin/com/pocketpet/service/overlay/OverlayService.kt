@@ -41,6 +41,7 @@ import com.pocketpet.core.model.PetPreferences
 import com.pocketpet.core.model.PetState
 import com.pocketpet.core.model.ScreenBounds
 import com.pocketpet.core.model.SystemAction
+import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -54,6 +55,11 @@ import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import com.pocketpet.service.overlay.R
+
+@AndroidEntryPoint
+open class HiltService : android.app.Service() {
+    override fun onBind(intent: Intent?) = null
+}
 
 @EntryPoint
 @InstallIn(SingletonComponent::class)
