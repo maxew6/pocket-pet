@@ -57,7 +57,7 @@ import kotlin.math.roundToInt
 import com.pocketpet.service.overlay.R
 
 @AndroidEntryPoint
-class HiltService : android.app.Service() {
+open class HiltService : android.app.Service() {
     override fun onBind(intent: Intent?) = null
 }
 
@@ -128,13 +128,13 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
         savedStateRegistryController.performRestore(null)
         super.onCreate()
 
-        if (!Settings.canDrawOverlays(this)) {
+        if (!Settings.canDrawOverlays(this@OverlayService)) {
             stopSelf()
             return
         }
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        screenBoundsProvider = ScreenBoundsProvider(this)
+        screenBoundsProvider = ScreenBoundsProvider(this@OverlayService)
         petSizePx = (88 * resources.displayMetrics.density).roundToInt()
         isRunning = true
 
@@ -179,17 +179,17 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channel = NotificationChannel(
             CHANNEL_ID,
-            getString(R.string.overlay_notification_channel_name),
+            this@OverlayService.getString(R.string.overlay_notification_channel_name),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = getString(R.string.overlay_notification_channel_description)
+            description = this@OverlayService.getString(R.string.overlay_notification_channel_description)
             setShowBadge(false)
         }
         manager.createNotificationChannel(channel)
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.overlay_notification_title))
-            .setContentText(getString(R.string.overlay_notification_text))
+        val notification = NotificationCompat.Builder(this@OverlayService, CHANNEL_ID)
+            .setContentTitle(this@OverlayService.getString(R.string.overlay_notification_title))
+            .setContentText(this@OverlayService.getString(R.string.overlay_notification_text))
             .setSmallIcon(R.drawable.ic_notification_pet)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -200,7 +200,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
         } else {
             0
         }
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
+        ServiceCompat.startForeground(this@OverlayService, NOTIFICATION_ID, notification, type)
     }
 
     // ---------------------------------------------------------------------------------------
@@ -208,7 +208,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
     // ---------------------------------------------------------------------------------------
 
     private fun addOverlayView() {
-        val density = resources.displayMetrics.density
+        val density = this@OverlayService.resources.displayMetrics.density
         val bounds = screenBoundsProvider.current(density)
         val startPosition = petRepository.snapshot.value.position.takeIf { it.xDp > 0f || it.yDp > 0f }
             ?: PetPosition(xDp = bounds.safeLeft + 24f, yDp = bounds.safeTop + 96f)
@@ -227,7 +227,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
         }
         layoutParams = params
 
-        val view = ComposeView(this).apply {
+        val view = ComposeView(this@OverlayService).apply {
             setViewTreeLifecycleOwner(this@OverlayService)
             setViewTreeViewModelStoreOwner(this@OverlayService)
             setViewTreeSavedStateRegistryOwner(this@OverlayService)
@@ -273,7 +273,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
     // Behavior ticking
     // ---------------------------------------------------------------------------------------
 
-    private fun currentScreenBounds(): ScreenBounds = screenBoundsProvider.current(resources.displayMetrics.density)
+    private fun currentScreenBounds(): ScreenBounds = screenBoundsProvider.current(this@OverlayService.resources.displayMetrics.density)
 
     private fun tick(interaction: UserInteractionType? = null) {
         lifecycleScope.launch {
@@ -337,7 +337,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
     private fun onWindowDragged(delta: androidx.compose.ui.geometry.Offset) {
         if (cachedPreferences.positionLocked) return
         val params = layoutParams ?: return
-        val density = resources.displayMetrics.density
+        val density = this@OverlayService.resources.displayMetrics.density
         val bounds = currentScreenBounds()
         val newXDp = (params.x + delta.x) / density
         val newYDp = (params.y + delta.y) / density
@@ -365,7 +365,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
 
     private suspend fun animateThrow(initialVelocityXPxPerSecond: Float) {
         val params = layoutParams ?: return
-        val density = resources.displayMetrics.density
+        val density = this@OverlayService.resources.displayMetrics.density
         var velocity = initialVelocityXPxPerSecond
         var x = params.x.toFloat()
         val bounds = currentScreenBounds()
@@ -390,7 +390,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
 
     private suspend fun snapToNearestEdge() {
         val params = layoutParams ?: return
-        val density = resources.displayMetrics.density
+        val density = this@OverlayService.resources.displayMetrics.density
         val bounds = currentScreenBounds()
         val petSizeDp = petSizePx / density
         val currentX = params.x / density
