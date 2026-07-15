@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Ears -->
+    <path
+        android:fillColor="#F5EDE1"
+        android:pathData="M38,44 L30,26 L48,38 Z" />
+    <path
+        android:fillColor="#F5EDE1"
+        android:pathData="M70,44 L78,26 L60,38 Z" />
+    <!-- Body -->
+    <path
+        android:fillColor="#F5EDE1"
+        android:pathData="M54,36
+            C70,36 80,48 80,62
+            C80,76 68,84 54,84
+            C40,84 28,76 28,62
+            C28,48 38,36 54,36 Z" />
+    <!-- Eyes -->
+    <path
+        android:fillColor="#3A2E26"
+        android:pathData="M45,60 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+    <path
+        android:fillColor="#3A2E26"
+        android:pathData="M63,60 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+</vector>

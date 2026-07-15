@@ -1,0 +1,105 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Test, lint, and build the debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install the Android SDK platform and build tools
+        run: |
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" > /dev/null
+
+      # This repository's gradle/wrapper/gradle-wrapper.jar is intentionally not committed — it
+      # was generated in a network-disabled sandbox that could not download the real binary. This
+      # step provisions a real Gradle 8.7 via the official setup-gradle action and uses it to
+      # (re)generate a genuine wrapper before anything below touches ./gradlew. If a real jar is
+      # committed later, this step becomes a harmless no-op.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Ensure the Gradle wrapper jar exists
+        run: |
+          if [ ! -s gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "gradle-wrapper.jar missing — regenerating with the real Gradle 8.7 installed above."
+            gradle wrapper --gradle-version 8.7 --distribution-type bin
+          fi
+          chmod +x gradlew
+
+      - name: Validate Gradle wrapper checksum
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Run unit tests
+        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest
+
+      - name: Run Android Lint
+        run: ./gradlew --no-daemon --stacktrace lintDebug
+
+      - name: Build debug APK
+        run: ./gradlew --no-daemon --stacktrace assembleDebug
+
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: |
+            **/build/test-results/**
+            **/build/reports/tests/**
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-reports
+          path: |
+            **/build/reports/lint-results*.html
+            **/build/reports/lint-results*.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Locate the debug APK
+        if: success()
+        run: |
+          apk_path=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          if [ -z "$apk_path" ]; then
+            echo "::error::No debug APK found under app/build/outputs/apk/debug"
+            exit 1
+          fi
+          echo "Found APK at: $apk_path"
+          echo "APK_PATH=$apk_path" >> "$GITHUB_ENV"
+
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocket-pet-debug-apk
+          path: ${{ env.APK_PATH }}
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Deliberately minimal. Pocket Pet's accessibility service only ever calls performGlobalAction()
+  for a couple of system shortcuts (see AccessibilityGlobalAction in core:domain) — it does not
+  read window content, so it declares no content-inspection event types, no canRetrieveWindowContent,
+  and no flagRequestTouchExplorationMode.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canPerformGestures="false"
+    android:canRequestFilterKeyEvents="false"
+    android:canRequestTouchExplorationMode="false"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="200" />

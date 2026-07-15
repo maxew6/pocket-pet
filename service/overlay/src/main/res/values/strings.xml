@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="overlay_service_label">Pocket Pet overlay</string>
+    <string name="accessibility_service_label">Pocket Pet shortcuts</string>
+    <string name="accessibility_service_description">Lets Pocket Pet open the notification shade or quick settings when you ask it to. It does not read your screen content, keystrokes, or passwords.</string>
+    <string name="notification_listener_label">Pocket Pet notification awareness</string>
+    <string name="overlay_notification_channel_name">Pocket Pet</string>
+    <string name="overlay_notification_channel_description">Keeps your Pocket Pet companion running so it can stay on screen.</string>
+    <string name="overlay_notification_title">Pocket Pet is here</string>
+    <string name="overlay_notification_text">Tap to open Pocket Pet</string>
+</resources>
