@@ -57,7 +57,7 @@ import kotlin.math.roundToInt
 import com.pocketpet.service.overlay.R
 
 @AndroidEntryPoint
-open class HiltService : android.app.Service() {
+class HiltService : android.app.Service() {
     override fun onBind(intent: Intent?) = null
 }
 
