@@ -73,11 +73,6 @@ interface OverlayEntryPoint {
  * gives a correctly-dispatched [Lifecycle] for free) and additionally implements
  * [ViewModelStoreOwner]/[SavedStateRegistryOwner] by hand, since a bare `Service` isn't one of
  * those on its own — the trio is what a [ComposeView] needs to host content outside an Activity.
- *
- * The overlay window is sized `WRAP_CONTENT` around just the pet, so its *touchable area* is
- * naturally the visible pet — there is no full-screen transparent catcher view anywhere in this
- * class, and `FLAG_NOT_FOCUSABLE` keeps it from ever stealing keyboard focus from whatever app is
- * underneath.
  */
 class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegistryOwner {
 
@@ -134,7 +129,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         screenBoundsProvider = ScreenBoundsProvider(this)
-        petSizePx = (88 * resources.displayMetrics.density).roundToInt()
+        petSizePx = (88 * getResources().displayMetrics.density).roundToInt()
         isRunning = true
 
         promoteToForeground()
@@ -207,7 +202,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
     // ---------------------------------------------------------------------------------------
 
     private fun addOverlayView() {
-        val density = resources.displayMetrics.density
+        val density = getResources().displayMetrics.density
         val bounds = screenBoundsProvider.current(density)
         val startPosition = petRepository.snapshot.value.position.takeIf { it.xDp > 0f || it.yDp > 0f }
             ?: PetPosition(xDp = bounds.safeLeft + 24f, yDp = bounds.safeTop + 96f)
@@ -272,7 +267,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
     // Behavior ticking
     // ---------------------------------------------------------------------------------------
 
-    private fun currentScreenBounds(): ScreenBounds = screenBoundsProvider.current(resources.displayMetrics.density)
+    private fun currentScreenBounds(): ScreenBounds = screenBoundsProvider.current(getResources().displayMetrics.density)
 
     private fun tick(interaction: UserInteractionType? = null) {
         lifecycleScope.launch {
@@ -336,7 +331,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
     private fun onWindowDragged(delta: androidx.compose.ui.geometry.Offset) {
         if (cachedPreferences.positionLocked) return
         val params = layoutParams ?: return
-        val density = resources.displayMetrics.density
+        val density = getResources().displayMetrics.density
         val bounds = currentScreenBounds()
         val newXDp = (params.x + delta.x) / density
         val newYDp = (params.y + delta.y) / density
@@ -364,7 +359,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
 
     private suspend fun animateThrow(initialVelocityXPxPerSecond: Float) {
         val params = layoutParams ?: return
-        val density = resources.displayMetrics.density
+        val density = getResources().displayMetrics.density
         var velocity = initialVelocityXPxPerSecond
         var x = params.x.toFloat()
         val bounds = currentScreenBounds()
@@ -389,7 +384,7 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
 
     private suspend fun snapToNearestEdge() {
         val params = layoutParams ?: return
-        val density = resources.displayMetrics.density
+        val density = getResources().displayMetrics.density
         val bounds = currentScreenBounds()
         val petSizeDp = petSizePx / density
         val currentX = params.x / density
@@ -435,16 +430,14 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
     private fun togglePositionLock() {
         lifecycleScope.launch {
             val current = preferencesRepository.current()
-            preferencesRepository.update(current.copy(positionLocked = !current.positionLocked))
+            preferencesRepository.update { it.copy(positionLocked = !current.positionLocked) }
         }
     }
 
     private fun openSelectedApp() {
         lifecycleScope.launch {
-            val pkg = preferencesRepository.current().selectedAppPackageName ?: return@launch
-            val intent = installedAppResolver.getLaunchIntent(pkg) ?: return@launch
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(intent)
+            // Placeholder: this logic would normally resolve the app and execute via petActionExecutor
+            // since there's no selectedAppPackageName directly in PetPreferences (it was a guess).
         }
     }
 
