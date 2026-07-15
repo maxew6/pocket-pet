@@ -41,7 +41,10 @@ import com.pocketpet.core.model.PetPreferences
 import com.pocketpet.core.model.PetState
 import com.pocketpet.core.model.ScreenBounds
 import com.pocketpet.core.model.SystemAction
-import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.launchIn
@@ -50,9 +53,20 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import com.pocketpet.service.overlay.R
 
-@AndroidEntryPoint
-open class HiltLifecycleService : LifecycleService()
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface OverlayEntryPoint {
+    fun processBehaviorTick(): ProcessBehaviorTickUseCase
+    fun restorePetState(): RestorePetStateUseCase
+    fun petActionExecutor(): PetActionExecutor
+    fun petRepository(): PetRepository
+    fun preferencesRepository(): PetPreferencesRepository
+    fun notificationEventSource(): NotificationEventSource
+    fun systemStatusRepository(): SystemStatusRepository
+    fun installedAppResolver(): InstalledAppResolver
+}
 
 /**
  * Hosts the pet as a small `TYPE_APPLICATION_OVERLAY` window. Extends [LifecycleService] (which
@@ -65,20 +79,20 @@ open class HiltLifecycleService : LifecycleService()
  * class, and `FLAG_NOT_FOCUSABLE` keeps it from ever stealing keyboard focus from whatever app is
  * underneath.
  */
-class OverlayService : HiltLifecycleService(), ViewModelStoreOwner, SavedStateRegistryOwner {
+class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegistryOwner {
 
     override val viewModelStore: ViewModelStore = ViewModelStore()
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
     override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
 
-    @Inject lateinit var processBehaviorTick: ProcessBehaviorTickUseCase
-    @Inject lateinit var restorePetState: RestorePetStateUseCase
-    @Inject lateinit var petActionExecutor: PetActionExecutor
-    @Inject lateinit var petRepository: PetRepository
-    @Inject lateinit var preferencesRepository: PetPreferencesRepository
-    @Inject lateinit var notificationEventSource: NotificationEventSource
-    @Inject lateinit var systemStatusRepository: SystemStatusRepository
-    @Inject lateinit var installedAppResolver: InstalledAppResolver
+    private lateinit var processBehaviorTick: ProcessBehaviorTickUseCase
+    private lateinit var restorePetState: RestorePetStateUseCase
+    private lateinit var petActionExecutor: PetActionExecutor
+    private lateinit var petRepository: PetRepository
+    private lateinit var preferencesRepository: PetPreferencesRepository
+    private lateinit var notificationEventSource: NotificationEventSource
+    private lateinit var systemStatusRepository: SystemStatusRepository
+    private lateinit var installedAppResolver: InstalledAppResolver
 
     private lateinit var windowManager: WindowManager
     private lateinit var screenBoundsProvider: ScreenBoundsProvider
@@ -100,6 +114,16 @@ class OverlayService : HiltLifecycleService(), ViewModelStoreOwner, SavedStateRe
     }
 
     override fun onCreate() {
+        val entryPoint = EntryPointAccessors.fromApplication(applicationContext, OverlayEntryPoint::class.java)
+        processBehaviorTick = entryPoint.processBehaviorTick()
+        restorePetState = entryPoint.restorePetState()
+        petActionExecutor = entryPoint.petActionExecutor()
+        petRepository = entryPoint.petRepository()
+        preferencesRepository = entryPoint.preferencesRepository()
+        notificationEventSource = entryPoint.notificationEventSource()
+        systemStatusRepository = entryPoint.systemStatusRepository()
+        installedAppResolver = entryPoint.installedAppResolver()
+
         savedStateRegistryController.performRestore(null)
         super.onCreate()
 
