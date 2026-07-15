@@ -41,10 +41,7 @@ import com.pocketpet.core.model.PetPreferences
 import com.pocketpet.core.model.PetState
 import com.pocketpet.core.model.ScreenBounds
 import com.pocketpet.core.model.SystemAction
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
-import dagger.hilt.components.SingletonComponent
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.launchIn
@@ -53,6 +50,9 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.roundToInt
+
+@AndroidEntryPoint
+open class HiltLifecycleService : LifecycleService()
 
 /**
  * Hosts the pet as a small `TYPE_APPLICATION_OVERLAY` window. Extends [LifecycleService] (which
@@ -65,33 +65,20 @@ import kotlin.math.roundToInt
  * class, and `FLAG_NOT_FOCUSABLE` keeps it from ever stealing keyboard focus from whatever app is
  * underneath.
  */
-@EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface OverlayEntryPoint {
-        fun processBehaviorTick(): ProcessBehaviorTickUseCase
-        fun restorePetState(): RestorePetStateUseCase
-        fun petActionExecutor(): PetActionExecutor
-        fun petRepository(): PetRepository
-        fun preferencesRepository(): PetPreferencesRepository
-        fun notificationEventSource(): NotificationEventSource
-        fun systemStatusRepository(): SystemStatusRepository
-        fun installedAppResolver(): InstalledAppResolver
-    }
-
-class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegistryOwner {
+class OverlayService : HiltLifecycleService(), ViewModelStoreOwner, SavedStateRegistryOwner {
 
     override val viewModelStore: ViewModelStore = ViewModelStore()
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
     override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
 
-    private lateinit var processBehaviorTick: ProcessBehaviorTickUseCase
-    private lateinit var restorePetState: RestorePetStateUseCase
-    private lateinit var petActionExecutor: PetActionExecutor
-    private lateinit var petRepository: PetRepository
-    private lateinit var preferencesRepository: PetPreferencesRepository
-    private lateinit var notificationEventSource: NotificationEventSource
-    private lateinit var systemStatusRepository: SystemStatusRepository
-    private lateinit var installedAppResolver: InstalledAppResolver
+    @Inject lateinit var processBehaviorTick: ProcessBehaviorTickUseCase
+    @Inject lateinit var restorePetState: RestorePetStateUseCase
+    @Inject lateinit var petActionExecutor: PetActionExecutor
+    @Inject lateinit var petRepository: PetRepository
+    @Inject lateinit var preferencesRepository: PetPreferencesRepository
+    @Inject lateinit var notificationEventSource: NotificationEventSource
+    @Inject lateinit var systemStatusRepository: SystemStatusRepository
+    @Inject lateinit var installedAppResolver: InstalledAppResolver
 
     private lateinit var windowManager: WindowManager
     private lateinit var screenBoundsProvider: ScreenBoundsProvider
@@ -113,16 +100,6 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
     }
 
     override fun onCreate() {
-        val entryPoint = EntryPointAccessors.fromApplication(applicationContext, OverlayEntryPoint::class.java)
-        processBehaviorTick = entryPoint.processBehaviorTick()
-        restorePetState = entryPoint.restorePetState()
-        petActionExecutor = entryPoint.petActionExecutor()
-        petRepository = entryPoint.petRepository()
-        preferencesRepository = entryPoint.preferencesRepository()
-        notificationEventSource = entryPoint.notificationEventSource()
-        systemStatusRepository = entryPoint.systemStatusRepository()
-        installedAppResolver = entryPoint.installedAppResolver()
-
         savedStateRegistryController.performRestore(null)
         super.onCreate()
 
@@ -367,51 +344,51 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
         var velocity = initialVelocityXPxPerSecond
         var x = params.x.toFloat()
         val bounds = currentScreenBounds()
-        val minX = bounds.safeLeft * density
-        val maxX = (bounds.safeRight * density) - petSizePx
+        val petSizeDp = petSizePx / density
 
-        var steps = 0
-        while (abs(velocity) > 40f && steps < 240) {
-            x += velocity * (FRAME_MILLIS / 1000f)
-            velocity *= DECAY_PER_FRAME
-            if (x < minX) {
-                x = minX
-                velocity = -velocity * BOUNCE_DAMPING
-            } else if (x > maxX) {
-                x = maxX
-                velocity = -velocity * BOUNCE_DAMPING
-            }
-            params.x = x.roundToInt()
+        while (abs(velocity) > 100f) {
+            x += (velocity * 0.016f)
+            val clamped = bounds.clamp(PetPosition(x / density, params.y.toFloat() / density), petSizeDp)
+            params.x = (clamped.xDp * density).roundToInt()
             runCatching { windowManager.updateViewLayout(overlayView, params) }
-            delay(FRAME_MILLIS)
-            steps++
+
+            if (clamped.xDp <= bounds.safeLeft || clamped.xDp >= bounds.safeRight - petSizeDp) {
+                velocity = 0f
+            } else {
+                velocity *= 0.95f
+            }
+            delay(16)
         }
-        val finalDp = PetPosition(params.x / density, params.y / density)
-        petRepository.updatePosition(finalDp)
+        petRepository.updatePosition(PetPosition(params.x / density, params.y / density))
         petRepository.persistNow()
-        if (preferencesRepository.current().edgeSnappingEnabled) snapToNearestEdge()
     }
 
     private suspend fun snapToNearestEdge() {
         val params = layoutParams ?: return
         val density = resources.displayMetrics.density
         val bounds = currentScreenBounds()
-        val minX = bounds.safeLeft * density
-        val maxX = (bounds.safeRight * density) - petSizePx
-        val targetX = if (params.x - minX < maxX - params.x) minX else maxX
-
-        var current = params.x.toFloat()
-        var steps = 0
-        while (abs(targetX - current) > 1f && steps < 60) {
-            current += (targetX - current) * SPRING_EASE_FACTOR
-            params.x = current.roundToInt()
-            runCatching { windowManager.updateViewLayout(overlayView, params) }
-            delay(FRAME_MILLIS)
-            steps++
+        val petSizeDp = petSizePx / density
+        val currentX = params.x / density
+        val targetX = if (currentX + petSizeDp / 2 < (bounds.safeLeft + bounds.safeRight) / 2) {
+            bounds.safeLeft
+        } else {
+            bounds.safeRight - petSizeDp
         }
-        params.x = targetX.roundToInt()
+
+        val startX = currentX
+        val duration = 250L
+        val startTime = System.currentTimeMillis()
+
+        while (System.currentTimeMillis() - startTime < duration) {
+            val progress = (System.currentTimeMillis() - startTime).toFloat() / duration
+            val interpolatedX = startX + (targetX - startX) * progress
+            params.x = (interpolatedX * density).roundToInt()
+            runCatching { windowManager.updateViewLayout(overlayView, params) }
+            delay(16)
+        }
+        params.x = (targetX * density).roundToInt()
         runCatching { windowManager.updateViewLayout(overlayView, params) }
-        petRepository.updatePosition(PetPosition(params.x / density, params.y / density))
+        petRepository.updatePosition(PetPosition(targetX, params.y / density))
         petRepository.persistNow()
     }
 
@@ -423,43 +400,46 @@ class OverlayService : LifecycleService(), ViewModelStoreOwner, SavedStateRegist
         isHiddenTemporarily = true
         overlayView?.visibility = android.view.View.GONE
         lifecycleScope.launch {
-            delay(HIDE_DURATION_MILLIS)
+            delay(5_000)
             isHiddenTemporarily = false
-            overlayView?.visibility = android.view.View.VISIBLE
+            if (preferencesRepository.current().overlayEnabled) {
+                overlayView?.visibility = android.view.View.VISIBLE
+            }
         }
     }
 
     private fun togglePositionLock() {
         lifecycleScope.launch {
-            preferencesRepository.update { it.copy(positionLocked = !it.positionLocked) }
+            val current = preferencesRepository.current()
+            preferencesRepository.update(current.copy(positionLocked = !current.positionLocked))
         }
     }
 
     private fun openSelectedApp() {
         lifecycleScope.launch {
-            val favoriteApp = installedAppResolver.listLaunchableApps().firstOrNull() ?: return@launch
-            val result = petActionExecutor.execute(SystemAction.LaunchSelectedApp, favoriteApp)
-            if (result is ActionResult.Success) tick(UserInteractionType.Play)
+            val pkg = preferencesRepository.current().selectedAppPackageName ?: return@launch
+            val intent = installedAppResolver.getLaunchIntent(pkg) ?: return@launch
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
         }
     }
 
     companion object {
         private const val CHANNEL_ID = "pocket_pet_overlay"
         private const val NOTIFICATION_ID = 1001
-        private const val AMBIENT_TICK_INTERVAL_MILLIS = 12_000L
-        private const val HIDE_DURATION_MILLIS = 60_000L
-        private const val FRAME_MILLIS = 16L
-        private const val DECAY_PER_FRAME = 0.94f
-        private const val BOUNCE_DAMPING = 0.5f
-        private const val SPRING_EASE_FACTOR = 0.22f
+        private const val AMBIENT_TICK_INTERVAL_MILLIS = 30_000L
 
-        @Volatile private var isRunning = false
-
-        fun isRunning(): Boolean = isRunning
+        @Volatile var isRunning: Boolean = false
+            private set
 
         fun start(context: Context) {
+            if (isRunning) return
             val intent = Intent(context, OverlayService::class.java)
-            androidx.core.content.ContextCompat.startForegroundService(context, intent)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
         }
 
         fun stop(context: Context) {
